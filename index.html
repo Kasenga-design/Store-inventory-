@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Store Manager</title>
+  <title>Store POS</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
@@ -9,7 +9,7 @@
   <style>
     body {
       margin: 0;
-      font-family: Arial, sans-serif;
+      font-family: Arial;
       background: #0f172a;
       color: white;
     }
@@ -44,51 +44,45 @@
     button {
       width: 100%;
       padding: 12px;
-      margin-top: 10px;
+      margin-top: 8px;
       border-radius: 8px;
       border: none;
       font-weight: bold;
       cursor: pointer;
     }
 
-    .btn-add {
-      background: #22c55e;
-      color: white;
-    }
+    .sell { background: #ef4444; color: white; }
+    .add { background: #22c55e; color: white; }
+    .stock { background: #3b82f6; color: white; }
 
-    .btn-sell {
-      background: #ef4444;
-      color: white;
-    }
+    .low { color: #ef4444; }
 
-    .btn-stock {
-      background: #3b82f6;
-      color: white;
-    }
-
-    .product {
+    .topbar {
       display: flex;
       justify-content: space-between;
-      align-items: center;
-    }
-
-    .low {
-      color: #ef4444;
-      font-weight: bold;
+      margin-bottom: 10px;
     }
   </style>
 </head>
+
 <body>
 
-<header>📦 Store Manager</header>
+<header>🧾 Store POS System</header>
 
 <div class="container">
+
+  <div class="card">
+    <div class="topbar">
+      <div>📊 Today Sold:</div>
+      <div id="todaySales">0</div>
+    </div>
+  </div>
 
   <div class="card">
     <h3>Add Product</h3>
     <input id="name" placeholder="Product name">
     <input id="stock" type="number" placeholder="Starting stock">
-    <button class="btn-add" onclick="addProduct()">Add Product</button>
+    <button class="add" onclick="addProduct()">Add Product</button>
   </div>
 
   <div id="products"></div>
@@ -99,10 +93,10 @@
 const SUPABASE_URL = "YOUR_URL";
 const SUPABASE_KEY = "YOUR_KEY";
 
-const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 async function loadProducts() {
-  const { data } = await client.from("products").select("*");
+  const { data } = await db.from("products").select("*");
 
   let html = "";
 
@@ -111,15 +105,13 @@ async function loadProducts() {
 
     html += `
       <div class="card">
-        <div class="product">
-          <div>
-            <b>${p.name}</b><br>
-            <span class="${low}">Stock: ${p.stock}</span>
-          </div>
-        </div>
+        <b>${p.name}</b><br>
+        <span class="${low}">Stock: ${p.stock}</span>
 
-        <button class="btn-sell" onclick="sell('${p.id}', ${p.stock})">Sell</button>
-        <button class="btn-stock" onclick="addStock('${p.id}', ${p.stock})">Add Stock</button>
+        <input type="number" id="qty-${p.id}" placeholder="Quantity">
+
+        <button class="sell" onclick="sell('${p.id}', ${p.stock})">Sell</button>
+        <button class="stock" onclick="addStock('${p.id}', ${p.stock})">Add Stock</button>
       </div>
     `;
   });
@@ -133,35 +125,57 @@ async function addProduct() {
 
   if (!name || !stock) return alert("Fill all fields");
 
-  await client.from("products").insert([{ name, stock }]);
+  await db.from("products").insert([{ name, stock }]);
 
   loadProducts();
 }
 
 async function sell(id, stock) {
-  if (stock <= 0) return alert("Out of stock");
+  const qty = parseInt(document.getElementById(`qty-${id}`).value);
 
-  await client.from("products")
-    .update({ stock: stock - 1 })
+  if (!qty || qty <= 0) return alert("Enter quantity");
+  if (qty > stock) return alert("Not enough stock");
+
+  await db.from("products")
+    .update({ stock: stock - qty })
     .eq("id", id);
 
-  await client.from("sales")
-    .insert([{ product_id: id, quantity: 1 }]);
+  await db.from("sales")
+    .insert([{ product_id: id, quantity: qty }]);
 
   loadProducts();
+  loadTodaySales();
 }
 
 async function addStock(id, stock) {
-  await client.from("products")
-    .update({ stock: stock + 1 })
+  const qty = parseInt(document.getElementById(`qty-${id}`).value);
+
+  if (!qty || qty <= 0) return alert("Enter quantity");
+
+  await db.from("products")
+    .update({ stock: stock + qty })
     .eq("id", id);
 
   loadProducts();
 }
 
+async function loadTodaySales() {
+  const today = new Date().toISOString().split("T")[0];
+
+  const { data } = await db
+    .from("sales")
+    .select("*")
+    .gte("created_at", today);
+
+  let total = 0;
+  data.forEach(s => total += s.quantity);
+
+  document.getElementById("todaySales").innerText = total;
+}
+
 loadProducts();
+loadTodaySales();
 </script>
-const SUPABASE_URL = "bgpkziuvzijvtcqpsdxe";
-const SUPABASE_KEY = "sb_publishable_Eod8FUbYqBLjYtxMEqxskA_PHK-1ryh";
+
 </body>
 </html>
